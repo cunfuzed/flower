@@ -24,8 +24,8 @@ let entityTypes = {
     size: 30,
     speed: 5,
     weight: 5,
-    damage: 2,
-    maxHealth: 10000,
+    damage: 25,
+    maxHealth: 200,
     behavior: "mouse",
     side: "player",
     draw: function () {
@@ -86,22 +86,119 @@ let entityTypes = {
       ctx.fill();
       drawHealthBar(this);
     }
+  },
+  soldierAnt:{
+    size: 50,
+    speed: 3,
+    weight: 0.5,
+    maxHealth: 40,
+    damage: 10,
+    behavior: "ram",
+    score: 50,
+    side: "enemy",
+    draw: function (){
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.angle);
+      ctx.fillStyle = "rgb(50,50,50)";
+      ctx.beginPath();
+      ctx.arc(-10, 0, this.size*0.5, 0, Math.PI * 2);
+      ctx.arc(25, 0, this.size*0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgb(100,100,100)";
+      ctx.beginPath();
+      ctx.arc(-10, 0, this.size*0.3, 0, Math.PI * 2);
+      ctx.arc(25, 0, this.size*0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      drawHealthBar(this);
+    }
+  },
+  tester:{
+    size: 50,
+    speed: 1.5,
+    weight: 5,
+    maxHealth: 1000,
+    damage: 0,
+    behavior: "ram",
+    score: 0,
+    side: "enemy",
+    draw: function () {
+      ctx.fillStyle = "rgb(255,255,255)";
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      drawHealthBar(this);
+    }
   }
 };
 
 //petals 
 let petalTypes = {
   basic: {
-    health: 5,
-    damage: 5,
-    reloadTime: 100,
+    health: 10,
+    damage: 10,
+    reloadTime: 250,
     size: 10,
-    weight: 0.2,
+    weight: 0.002,
+    class: "damage",
     draw: function (){
       ctx.fillStyle = "white";
       ctx.shadowColor = "white";
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  },
+  rose:{
+    health: 5,
+    damage: 5,
+    reloadTime: 150,
+    size: 10,
+    weight: 0.001,
+    heal: 10,
+    class: "heal",
+    draw: function (){
+      ctx.fillStyle = "pink";
+      ctx.shadowColor = "pink";
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  },
+  heavy:{
+    health: 20,
+    damage: 20,
+    reloadTime: 550,
+    size: 15,
+    weight: 100,
+    class: "damage",
+    draw: function (){
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(this.x+5, this.y-5, this.size*0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  },
+  rock:{
+    health: 90,
+    damage: 10,
+    reloadTime: 1000,
+    size: 10,
+    weight: 2,
+    class: "damage",
+    draw: function (){
+      ctx.fillStyle = "rgb(100,100,100)";
+      ctx.beginPath();
+      ctx.lineTo(this.x,this.y-this.size/0.75);
+      ctx.lineTo(this.x+this.size*1.2,this.y-this.size/2);
+      ctx.lineTo(this.x+this.size*0.8,this.y+this.size);
+      ctx.lineTo(this.x-this.size*0.8,this.y+this.size);
+      ctx.lineTo(this.x-this.size*1.2,this.y-this.size/2);
       ctx.fill();
     }
   },
@@ -122,13 +219,13 @@ function drawHealthBar(entity) {
 }
 
 //entity
-// Entity constructor — add vx/vy
-function Entity(type, x, y) {
+function Entity(type, x, y, rarity) {
   this.type = type;
   this.x = x;
   this.y = y;
   this.vx = 0;
   this.vy = 0;
+  this.angle = 0;
   this.size = entityTypes[type].size;
   this.speed = entityTypes[type].speed;
   this.weight = entityTypes[type].weight;
@@ -137,6 +234,14 @@ function Entity(type, x, y) {
   this.health = this.maxHealth;
   this.damage = entityTypes[type].damage || 0;
   this.side = entityTypes[type].side;
+  this.rarity = rarity || 1;
+  this.rarityMultiplier = 8 ** (this.rarity - 1);
+
+  this.damage*=this.rarityMultiplier;
+  this.maxHealth*=this.rarityMultiplier;
+  this.health*=this.rarityMultiplier;
+  this.size+=this.rarityMultiplier/100000;
+  this.weight*=this.rarityMultiplier/5;
 }
 
 Entity.prototype.draw = function () {
@@ -204,8 +309,13 @@ Entity.prototype.update = function () {
   // apply velocity then friction
   this.x += this.vx;
   this.y += this.vy;
-  this.vx *= 0.8;
-  this.vy *= 0.8;
+  this.vx *= 1;
+  this.vy *= 1;
+
+  // update angle to match movement direction
+  if (Math.hypot(this.vx, this.vy) > 0.1) {
+    this.angle = Math.atan2(this.vy, this.vx);
+  }
 };
 
 // moving dot
@@ -220,6 +330,7 @@ function Projectile(x, y, dx, dy) {
   this.range = 650;
   this.traveled = 0;
   this.dead = false;
+  this.angle = Math.atan2(dy, dx);
 }
 
 Projectile.prototype.update = function () {
@@ -262,9 +373,9 @@ Projectile.prototype.draw = function () {
 };
 
 //petals
-function Petal(orbitRadius, orbitSpeed, index, type) {
+function Petal(orbitRadius, orbitSpeed, index, type, side, rarity) {
   this.type = type;
-  this.index  = index;
+  this.index = index;
   this.orbitRadius = orbitRadius;
   this.currentRadius = 0;
   this.orbitSpeed = orbitSpeed;
@@ -277,12 +388,33 @@ function Petal(orbitRadius, orbitSpeed, index, type) {
   this.maxHealth = petalTypes[this.type].health;
   this.weight = petalTypes[this.type].weight;
   this.health = this.maxHealth;
+  this.class = petalTypes[this.type].class;
+  this.heal = petalTypes[this.type].heal;
+  this.side = side;
+  this.aliveTimer = 0;
+  this.hitTick = 0;
+  this.rarity = rarity;
+  this.rarityMultiplier = 3 ** (this.rarity - 1);
   this.x = player.x;
   this.y = player.y;
+  this.angle = 0;
+  this.vx = 0; 
+  this.vy = 0;
+
+  //offsets
+  this.ox = 0;
+  this.oy = 0;
+
+  this.damage *= this.rarityMultiplier;
+  this.maxHealth *= this.rarityMultiplier;
+  this.health *= this.rarityMultiplier;
+  
+  if (this.class === "heal") {
+    this.heal *= this.rarityMultiplier;
+  }
 }
 
 Petal.prototype.update = function () {
-  // reload
   if (!this.alive) {
     this.reloadTimer--;
     if (this.reloadTimer <= 0) {
@@ -290,11 +422,13 @@ Petal.prototype.update = function () {
       this.spawning = true;
       this.currentRadius = 0;
       this.health = this.maxHealth;
+      this.aliveTimer = 0;
+      this.vx = 0; this.vy = 0;
+      this.ox = 0; this.oy = 0;
     }
     return;
   }
 
-  // move somewhere
   if (this.spawning) {
     this.currentRadius += (this.orbitRadius - this.currentRadius) * 0.12;
     if (this.orbitRadius - this.currentRadius < 0.5) {
@@ -303,59 +437,83 @@ Petal.prototype.update = function () {
     }
   }
 
-  // nerd stuff
-  let myAngle = petalAngle + (Math.PI * 2 / petals.length) * this.index;
-  this.x = player.x + Math.cos(myAngle) * this.currentRadius;
-  this.y = player.y + Math.sin(myAngle) * this.currentRadius;
+  // snap radius toward target
+  if (this.currentRadius !== this.orbitRadius) {
+    this.currentRadius += (this.orbitRadius - this.currentRadius) * 0.12;
+    if (Math.abs(this.orbitRadius - this.currentRadius) < 0.5)
+      this.currentRadius = this.orbitRadius;
+  }
 
-  // no hit while ded
-  if (this.spawning) return;
-
-  // moving outward if told to
-  if(this.currentRadius!==this.orbitRadius){
-    if(this.currentRadius<this.orbitRadius){
-      this.currentRadius += (this.orbitRadius - this.currentRadius) * 0.12;
-      if (this.orbitRadius - this.currentRadius < 0.5) {
-        this.currentRadius = this.orbitRadius;
-      }
-    }
-    else{
-      this.currentRadius -= (this.currentRadius - this.orbitRadius) * 0.12;
-      if (this.currentRadius - this.orbitRadius < 0.5){
-        this.currentRadius = this.orbitRadius;
-      }
+  // healing
+  if (this.class === "heal") {
+    if (player.health < entityTypes[player.type].maxHealth) { this.aliveTimer++; }
+    if (this.aliveTimer >= 90) { this.orbitRadius = 0; }
+    if (this.aliveTimer >= 100) {
+      player.health += this.heal;
+      if (player.health > entityTypes[player.type].maxHealth)
+        player.health = entityTypes[player.type].maxHealth;
+      this.health = 0;
+      this.aliveTimer = 0;
     }
   }
 
+  // compute orbit anchor
+  let myAngle = petalAngle + (Math.PI * 2 / petals.length) * this.index;
+  this.angle = myAngle;
+  let orbitX = player.x + Math.cos(myAngle) * this.currentRadius;
+  let orbitY = player.y + Math.sin(myAngle) * this.currentRadius;
+
+  // spring: pull offset back toward orbit anchor
+  this.vx += -this.ox * 0.3;
+  this.vy += -this.oy * 0.3;
+
+  // apply and damp
+  this.ox += this.vx;
+  this.oy += this.vy;
+  this.vx *= 0.6;
+  this.vy *= 0.6;
+
+  // final position = anchor + offset
+  this.x = orbitX + this.ox;
+  this.y = orbitY + this.oy;
+
+  if (this.spawning) return;
+
+  if (this.hitTick > 0) this.hitTick--;
+
   // collisions
-  for (let i = 0; i < entities.length; i++) {
-    if (entities[i] === this) continue;
+  for (let i = entities.length - 1; i >= 0; i--) {
     let other = entities[i];
     let dist = distance(this.x, this.y, other.x, other.y);
-    if (dist < this.size + other.size) {
+    if (dist < this.size + other.size && dist > 0.01) {
       let overlap = (this.size + other.size) - dist;
-      let dx = this.x - other.x;
-      let dy = this.y - other.y;
+      let nx = (this.x - other.x) / dist;
+      let ny = (this.y - other.y) / dist;
 
       let totalWeight = this.weight + other.weight;
-      let myShare     = other.weight / totalWeight;
-      let theirShare  = this.weight  / totalWeight;
+      let myShare    = other.weight / totalWeight;
+      let theirShare = this.weight  / totalWeight;
 
-      this.x  += (dx / dist) * overlap * myShare;
-      this.y  += (dy / dist) * overlap * myShare;
-      other.vx -= (dx / dist) * overlap * theirShare;
-      other.vy -= (dy / dist) * overlap * theirShare;
+      // push petal via offset velocity
+      this.vx  += nx * overlap * myShare;
+      this.vy  += ny * overlap * myShare;
+      // push entity via its own velocity
+      other.vx -= nx * overlap * theirShare * 10;
+      other.vy -= ny * overlap * theirShare * 10;
 
-      this.health -= other.damage;
-      other.health -= this.damage;
-      if (other.health <= 0){
+      if (this.side !== other.side && this.hitTick <= 0) {
+        this.health  -= other.damage;
+        other.health -= this.damage*(this.health/this.maxHealth);
+        this.hitTick = 10;
+      }
+
+      if (other.health <= 0) {
         score += entityTypes[other.type].score;
         entities.splice(i, 1);
       }
     }
   }
 
-  // ded
   if (this.health <= 0) {
     this.alive = false;
     this.reloadTimer = this.reloadTime;
@@ -373,23 +531,110 @@ Petal.prototype.draw = function () {
 };
 
 //starting entities
-let player = new Entity("player", 100, 100);
+let player = new Entity("player", 900, 900);
 entities.push(player);
-entities.push(new Entity("blob",    400, 300));
-entities.push(new Entity("speeder", 600, 200));
-entities.push(new Entity("tank",    700, 500));
+entities.push(new Entity("soldierAnt", 0, 0, 1));
 
 // petals settings
 let petals = [];
 let petalAngle = 0;             // single shared angle — all petals derive from this
-let PETAL_COUNT  = 5;
+let PETAL_COUNT  = 10;
 const ORBIT_RADIUS = 100;
 const ORBIT_SPEED  = 0.03;
-let maxOrbitRadius = 150;
+let maxOrbitRadius = 300;
 let minOrbitRadius = 75;
 
-for (let i = 0; i < PETAL_COUNT; i++) {
-  petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "basic"));
+function basicLoad(){
+  petals[0] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 0, "basic", "player",2);
+  petals[1] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 1, "basic", "player",2);
+  petals[2] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 2, "rock", "player",2);
+  petals[3] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 3, "heavy", "player",2);
+  petals[4] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 4, "rose", "player",2);
+}
+
+function fillAll(){
+  for(let i = 0;i<PETAL_COUNT;i++){
+    petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "rose", "player",3));
+  }
+}
+fillAll();
+//basicLoad();
+
+
+//drawing the petal slots
+function drawPetalSlots(){
+  const slotSize = 55;
+  const gap = 8;
+  const nameH = 16;
+  const pad = 10;
+  const totalW = petals.length * (slotSize + gap) - gap;
+  const startX = (canvas.width - totalW) / 2;
+  const startY = canvas.height - slotSize - nameH - pad * 2 - 10;
+
+  for (let i = 0; i < petals.length; i++) {
+    const p = petals[i];
+    const sx = startX + i * (slotSize + gap);
+    const sy = startY;
+    const cx = sx + slotSize / 2;
+    const cy = sy + slotSize / 2;
+
+    // slot background
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.beginPath();
+    ctx.roundRect(sx, sy, slotSize, slotSize, 8);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(sx, sy, slotSize, slotSize, 8);
+    ctx.stroke();
+
+    // draw petal icon (clipped + scaled)
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(sx, sy, slotSize, slotSize, 8);
+    ctx.clip();
+    ctx.translate(cx, cy);
+    const scale = (slotSize * 0.22) / p.size;
+    ctx.scale(scale, scale);
+    const prevX = p.x, prevY = p.y;
+    p.x = 0; p.y = 0;
+    petalTypes[p.type].draw.call(p);
+    p.x = prevX; p.y = prevY;
+    ctx.restore();
+
+    // overlays drawn in screen space, also clipped to slot
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(sx, sy, slotSize, slotSize, 8);
+    ctx.clip();
+
+    if (!p.alive) {
+      // dark overlay + reload arc
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(sx, sy, slotSize, slotSize);
+      const progress = 1 - (p.reloadTimer / p.reloadTime);
+      ctx.strokeStyle = "rgba(255,255,255,0.75)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, slotSize * 0.28, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+      ctx.stroke();
+    } else {
+      const ratio = 1 - (p.health / p.maxHealth);
+      const drainH = slotSize * ratio;
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.fillRect(sx, sy, slotSize, drainH);
+    }
+
+    ctx.restore();
+
+    // petal type name
+    ctx.fillStyle = "white";
+    ctx.font = "11px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(p.type, cx, sy + slotSize + nameH);
+  }
+  ctx.textAlign = "left";
 }
 
 // input
@@ -440,6 +685,9 @@ function drawDisplay() {
   ctx.textAlign = "center";
   ctx.fillText("HP  " + Math.ceil(player.health) + " / " + player.maxHealth, canvas.width / 2, by + bh + 16);
   ctx.textAlign = "left";
+
+  //calling
+  drawPetalSlots();
 }
 
 //game loop
@@ -461,7 +709,7 @@ function update() {
   petalAngle += ORBIT_SPEED;
   for (let i = 0; i < petals.length; i++) {
     petals[i].update();
-    petals[i].draw();
+    if(petals[i].alive){petals[i].draw()}
   }
 
   //killing undead stuff
@@ -488,11 +736,11 @@ function gameLoop() {
     return;
   }
   //passive spawning
-  if (Math.random() < 0.01){
-    let x = Math.random() * canvas.width;
-    let y = Math.random() * canvas.height;
-    let type = Math.random() < 0.5 ? "blob" : Math.random() < 0.5 ? "speeder" : "tank";
-    entities.push(new Entity(type, x, y));
+  if (Math.random() < 0.1){
+    let x = 0;
+    let y = 0;
+    let type = "soldierAnt";
+    entities.push(new Entity(type, x, y, 1));
   }
   //petal radius change
   if (keys[" "]) {
@@ -508,7 +756,7 @@ function gameLoop() {
       petals[i].orbitRadius = ORBIT_RADIUS;
     }
   }
-  
+
   update();
   requestAnimationFrame(gameLoop);
 }
