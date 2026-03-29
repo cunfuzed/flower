@@ -22,8 +22,8 @@ let gameOver = false;
 let entityTypes = {
   player: {
     size: 30,
-    speed: 5,
-    weight: 5,
+    speed: 1000,
+    weight: 100,
     damage: 25,
     maxHealth: 200,
     behavior: "mouse",
@@ -140,7 +140,8 @@ let petalTypes = {
     damage: 10,
     reloadTime: 250,
     size: 10,
-    weight: 0.002,
+    weight: 0.1,
+    attraction: 150,
     class: "damage",
     draw: function (){
       ctx.fillStyle = "white";
@@ -157,6 +158,7 @@ let petalTypes = {
     size: 10,
     weight: 0.001,
     heal: 10,
+    attraction: 0,
     class: "heal",
     draw: function (){
       ctx.fillStyle = "pink";
@@ -172,6 +174,7 @@ let petalTypes = {
     reloadTime: 550,
     size: 15,
     weight: 100,
+    attraction: 150,
     class: "damage",
     draw: function (){
       ctx.fillStyle = "black";
@@ -190,6 +193,7 @@ let petalTypes = {
     reloadTime: 1000,
     size: 10,
     weight: 2,
+    attraction: 20,
     class: "damage",
     draw: function (){
       ctx.fillStyle = "rgb(100,100,100)";
@@ -202,6 +206,23 @@ let petalTypes = {
       ctx.fill();
     }
   },
+  stinger:{
+    health: 1,
+    damage: 100,
+    reloadTime: 1000,
+    size: 5,
+    weight: 2,
+    attraction: 10,
+    class: "damage",
+    draw: function (){
+      ctx.fillStyle = "rgb(0,0,0)";
+      ctx.beginPath();
+      ctx.lineTo(this.x,this.y-this.size);
+      ctx.lineTo(this.x+this.size,this.y+this.size);
+      ctx.lineTo(this.x-this.size,this.y+this.size);
+      ctx.fill();
+    }
+  }
 }
 
 // drawing health bar
@@ -225,6 +246,8 @@ function Entity(type, x, y, rarity) {
   this.y = y;
   this.vx = 0;
   this.vy = 0;
+  this.othervx = 0;
+  this.othervy = 0;
   this.angle = 0;
   this.size = entityTypes[type].size;
   this.speed = entityTypes[type].speed;
@@ -235,7 +258,16 @@ function Entity(type, x, y, rarity) {
   this.damage = entityTypes[type].damage || 0;
   this.side = entityTypes[type].side;
   this.rarity = rarity || 1;
-  this.rarityMultiplier = 8 ** (this.rarity - 1);
+  switch(this.rarity){
+      case 1: this.rarityMultiplier = 1; break;//common
+      case 2: this.rarityMultiplier = 3; break;//unusual
+      case 3: this.rarityMultiplier = 9; break;//rare
+      case 4: this.rarityMultiplier = 27; break;//epic
+      case 5: this.rarityMultiplier = 81; break;//legendary
+      case 6: this.rarityMultiplier = 243; break;//mythic
+      case 7: this.rarityMultiplier = 1822.5; break;//ultra
+      case 8: this.rarityMultiplier = 10935; break;//super
+  }
 
   this.damage*=this.rarityMultiplier;
   this.maxHealth*=this.rarityMultiplier;
@@ -255,7 +287,7 @@ Entity.prototype.update = function () {
       let dy = player.y - this.y;
       let dist = Math.hypot(dx, dy);
       if (dist > 1) {
-        this.vx += (dx / dist) * 0.5;   // accelerate toward player
+        this.vx += (dx / dist) * 0.5;
         this.vy += (dy / dist) * 0.5;
         let spd = Math.hypot(this.vx, this.vy);
         if (spd > this.speed) {          // cap at max speed
@@ -269,13 +301,14 @@ Entity.prototype.update = function () {
       let dx = mouse.x - this.x;
       let dy = mouse.y - this.y;
       let dist = Math.hypot(dx, dy);
-      if (dist > 0) {
-        let move = Math.min(dist, this.speed);  // ← clamp: fixes vibration
-        this.vx = (dx / dist) * move;
-        this.vy = (dy / dist) * move;
-      } else {
-        this.vx = 0;
-        this.vy = 0;
+      if (dist > 1) {
+        this.vx += (dx / dist) * 0.5;
+        this.vy += (dy / dist) * 0.5;
+        let spd = Math.hypot(this.vx, this.vy);
+        if (spd > this.speed) {          // cap at max speed
+          this.vx = (this.vx / spd) * this.speed;
+          this.vy = (this.vy / spd) * this.speed;
+        }
       }
       break;
     }
@@ -307,10 +340,12 @@ Entity.prototype.update = function () {
   }
 
   // apply velocity then friction
-  this.x += this.vx;
-  this.y += this.vy;
-  this.vx *= 1;
-  this.vy *= 1;
+  this.x += this.vx + this.othervx;
+  this.y += this.vy + this.othervy;
+  this.vx *= 0.85;
+  this.vy *= 0.85;
+  this.othervx *= 0.95;
+  this.othervy *= 0.95;
 
   // update angle to match movement direction
   if (Math.hypot(this.vx, this.vy) > 0.1) {
@@ -400,6 +435,8 @@ function Petal(orbitRadius, orbitSpeed, index, type, side, rarity) {
   this.angle = 0;
   this.vx = 0; 
   this.vy = 0;
+  this.attraction = petalTypes[this.type].attraction;
+  this.shouldAttract = false;
 
   //offsets
   this.ox = 0;
@@ -408,6 +445,7 @@ function Petal(orbitRadius, orbitSpeed, index, type, side, rarity) {
   this.damage *= this.rarityMultiplier;
   this.maxHealth *= this.rarityMultiplier;
   this.health *= this.rarityMultiplier;
+  this.weight *= this.rarityMultiplier/4;
   
   if (this.class === "heal") {
     this.heal *= this.rarityMultiplier;
@@ -447,7 +485,7 @@ Petal.prototype.update = function () {
   // healing
   if (this.class === "heal") {
     if (player.health < entityTypes[player.type].maxHealth) { this.aliveTimer++; }
-    if (this.aliveTimer >= 90) { this.orbitRadius = 0; }
+    if (this.aliveTimer >= 20) { this.orbitRadius = 0; }
     if (this.aliveTimer >= 100) {
       player.health += this.heal;
       if (player.health > entityTypes[player.type].maxHealth)
@@ -456,17 +494,35 @@ Petal.prototype.update = function () {
       this.aliveTimer = 0;
     }
   }
-
   // compute orbit anchor
   let myAngle = petalAngle + (Math.PI * 2 / petals.length) * this.index;
   this.angle = myAngle;
   let orbitX = player.x + Math.cos(myAngle) * this.currentRadius;
   let orbitY = player.y + Math.sin(myAngle) * this.currentRadius;
 
-  // spring: pull offset back toward orbit anchor
-  this.vx += -this.ox * 0.3;
-  this.vy += -this.oy * 0.3;
+  if (!this.spawning && this.hitTick <= 0) {
+    //attraction
+    for (let i = 0; i < entities.length; i++){
+      if(entities[i].side !== this.side){
+        let dx = entities[i].x - this.x;
+        let dy = entities[i].y - this.y;
+        let dist = Math.hypot(dx, dy);
+        if (dist < this.attraction && dist > 0.01){
+          let force = (1 - dist / this.attraction) * 10;  // stronger near enemy
+          this.vx += (dx / dist) * force;
+          this.vy += (dy / dist) * force;
+          this.shouldAttract = true;
+        }
+      }
+    }
+  }
 
+  // spring: pull offset back toward orbit anchor
+  if(!this.shouldAttract){
+    this.vx += -this.ox * 0.3;
+    this.vy += -this.oy * 0.3;
+  }
+  this.shouldAttract = false;
   // apply and damp
   this.ox += this.vx;
   this.oy += this.vy;
@@ -480,7 +536,6 @@ Petal.prototype.update = function () {
   if (this.spawning) return;
 
   if (this.hitTick > 0) this.hitTick--;
-
   // collisions
   for (let i = entities.length - 1; i >= 0; i--) {
     let other = entities[i];
@@ -494,16 +549,21 @@ Petal.prototype.update = function () {
       let myShare    = other.weight / totalWeight;
       let theirShare = this.weight  / totalWeight;
 
+      let mult = 1;
+      //calculating multiplier for petal
+      if(this.shouldAttract){
+        mult = 0.0;
+      }
       // push petal via offset velocity
-      this.vx  += nx * overlap * myShare;
-      this.vy  += ny * overlap * myShare;
+      this.x  += nx * overlap * myShare * mult;
+      this.y  += ny * overlap * myShare * mult;
       // push entity via its own velocity
-      other.vx -= nx * overlap * theirShare * 10;
-      other.vy -= ny * overlap * theirShare * 10;
+      other.othervx -= nx * overlap * theirShare * 10;
+      other.othervy -= ny * overlap * theirShare * 10;
 
       if (this.side !== other.side && this.hitTick <= 0) {
-        this.health  -= other.damage;
         other.health -= this.damage*(this.health/this.maxHealth);
+        this.health  -= other.damage;
         this.hitTick = 10;
       }
 
@@ -533,7 +593,7 @@ Petal.prototype.draw = function () {
 //starting entities
 let player = new Entity("player", 900, 900);
 entities.push(player);
-entities.push(new Entity("soldierAnt", 0, 0, 1));
+entities.push(new Entity("tester", 0, 0, 8));
 
 // petals settings
 let petals = [];
@@ -543,10 +603,11 @@ const ORBIT_RADIUS = 100;
 const ORBIT_SPEED  = 0.03;
 let maxOrbitRadius = 300;
 let minOrbitRadius = 75;
+let zoom = 0.5; 
 
 function basicLoad(){
   petals[0] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 0, "basic", "player",2);
-  petals[1] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 1, "basic", "player",2);
+  petals[1] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 1, "stinger", "player",2);
   petals[2] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 2, "rock", "player",2);
   petals[3] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 3, "heavy", "player",2);
   petals[4] = new Petal(ORBIT_RADIUS, ORBIT_SPEED, 4, "rose", "player",2);
@@ -554,7 +615,7 @@ function basicLoad(){
 
 function fillAll(){
   for(let i = 0;i<PETAL_COUNT;i++){
-    petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "rose", "player",3));
+    petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "basic", "player",8));
   }
 }
 fillAll();
@@ -645,19 +706,8 @@ document.addEventListener("keyup",   e => { keys[e.key] = false; });
 let mouse = { x: 0, y: 0 };
 canvas.addEventListener("mousemove", e => {
   const rect = canvas.getBoundingClientRect();
-  mouse.x = e.clientX - rect.left;
-  mouse.y = e.clientY - rect.top;
-});
-
-let shootCooldown = 0;
-canvas.addEventListener("click", () => {
-  if (gameOver || shootCooldown > 0) return;
-  let dx = mouse.x - player.x;
-  let dy = mouse.y - player.y;
-  let dist = Math.hypot(dx, dy);
-  if (dist === 0) return;
-  projectiles.push(new Projectile(player.x, player.y, dx / dist, dy / dist));
-  shootCooldown = 12;
+  mouse.x = (e.clientX - rect.left - canvas.width / 2) / zoom + player.x;
+  mouse.y = (e.clientY - rect.top - canvas.height / 2) / zoom + player.y;
 });
 
 // display
@@ -693,7 +743,6 @@ function drawDisplay() {
 //game loop
 function update() {
   if (player.health <= 0) { gameOver = true; return; }
-  if (shootCooldown > 0) shootCooldown--;
 
   for (let i = entities.length - 1; i >= 0; i--) {
     entities[i].update();
@@ -719,8 +768,6 @@ function update() {
       entities.splice(i, 1);
     }
   }
-
-  drawDisplay();
 }
 
 function gameLoop() {
@@ -736,11 +783,11 @@ function gameLoop() {
     return;
   }
   //passive spawning
-  if (Math.random() < 0.1){
+  if (Math.random() < 0.1&&entities.length<100){
     let x = 0;
     let y = 0;
-    let type = "soldierAnt";
-    entities.push(new Entity(type, x, y, 1));
+    let type = "tester";
+    entities.push(new Entity(type, x, y, 8));
   }
   //petal radius change
   if (keys[" "]) {
@@ -757,7 +804,15 @@ function gameLoop() {
     }
   }
 
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-player.x, -player.y);
   update();
+  ctx.restore();
+
+  drawDisplay();
+  
   requestAnimationFrame(gameLoop);
 }
 gameLoop();
