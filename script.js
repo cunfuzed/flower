@@ -188,9 +188,9 @@ let petalTypes = {
     }
   },
   rock:{
-    health: 90,
-    damage: 10,
-    reloadTime: 1000,
+    health: 19,
+    damage: 15,
+    reloadTime: 300,
     size: 10,
     weight: 2,
     attraction: 20,
@@ -211,9 +211,11 @@ let petalTypes = {
     damage: 100,
     reloadTime: 1000,
     size: 5,
-    weight: 2,
+    weight: 0.01,
     attraction: 10,
     class: "damage",
+    amounts: [1, 1, 1, 1, 1, 3, 5, 5, 5],
+    clumpType: "clump",
     draw: function (){
       ctx.fillStyle = "rgb(0,0,0)";
       ctx.beginPath();
@@ -222,7 +224,25 @@ let petalTypes = {
       ctx.lineTo(this.x-this.size,this.y+this.size);
       ctx.fill();
     }
-  }
+  },
+  light:{
+    health: 1,
+    damage: 1,
+    reloadTime: 100,
+    size: 5,
+    weight: 0.01,
+    attraction: 10,
+    class: "damage",
+    amounts: [1, 2, 2, 3, 3, 5, 5, 5, 5],
+    clumpType: "linear",
+    draw: function (){
+      ctx.fillStyle = "white";
+      ctx.shadowColor = "white";
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    } 
+  },
 }
 
 // drawing health bar
@@ -430,6 +450,11 @@ function Petal(orbitRadius, orbitSpeed, index, type, side, rarity) {
   this.hitTick = 0;
   this.rarity = rarity;
   this.rarityMultiplier = 3 ** (this.rarity - 1);
+  this.clumpType = petalTypes[this.type].clumpType || "clump";
+  this.amount = petalTypes[this.type].amounts ? petalTypes[this.type].amounts[this.rarity - 1] : 1;
+  this.clumpAngle = 0;
+  this.subX = [];
+  this.subY = [];
   this.x = player.x;
   this.y = player.y;
   this.angle = 0;
@@ -446,7 +471,7 @@ function Petal(orbitRadius, orbitSpeed, index, type, side, rarity) {
   this.maxHealth *= this.rarityMultiplier;
   this.health *= this.rarityMultiplier;
   this.weight *= this.rarityMultiplier/4;
-  
+
   if (this.class === "heal") {
     this.heal *= this.rarityMultiplier;
   }
@@ -533,43 +558,102 @@ Petal.prototype.update = function () {
   this.x = orbitX + this.ox;
   this.y = orbitY + this.oy;
 
+  // update sub-petal positions for clump petals
+  if(this.amount>1){
+    switch(this.clumpType){ 
+        case "clump": 
+          this.clumpAngle += 0.05;
+          const clumpR = this.size * 2.5;
+          this.subX = [];
+          this.subY = [];
+          for (let j = 0; j < this.amount; j++) {
+            let a = this.clumpAngle + (Math.PI * 2 / this.amount) * j;
+            this.subX.push(this.x + Math.cos(a) * clumpR);
+            this.subY.push(this.y + Math.sin(a) * clumpR);
+          }
+        break;
+        case "linear":
+          const angularGap = (this.size * 2.2) / (this.currentRadius || 1);
+          const totalSpread = angularGap * (this.amount - 1);
+          this.subX = [];
+          this.subY = [];
+          for (let j = 0; j < this.amount; j++) {
+            let a = myAngle - totalSpread / 2 + angularGap * j;
+            this.subX.push(player.x + Math.cos(a) * this.currentRadius);
+            this.subY.push(player.y + Math.sin(a) * this.currentRadius);
+          }
+        break;
+    }
+  }
+
   if (this.spawning) return;
 
   if (this.hitTick > 0) this.hitTick--;
+
   // collisions
-  for (let i = entities.length - 1; i >= 0; i--) {
-    let other = entities[i];
-    let dist = distance(this.x, this.y, other.x, other.y);
-    if (dist < this.size + other.size && dist > 0.01) {
-      let overlap = (this.size + other.size) - dist;
-      let nx = (this.x - other.x) / dist;
-      let ny = (this.y - other.y) / dist;
+  if (this.amount > 1) {
+    for (let j = 0; j < this.amount; j++) {
+      let sx = this.subX[j];
+      let sy = this.subY[j];
+      for (let i = entities.length - 1; i >= 0; i--) {
+        let other = entities[i];
+        let dist = distance(sx, sy, other.x, other.y);
+        if (dist < this.size + other.size && dist > 0.01) {
+          let nx = (sx - other.x) / dist;
+          let ny = (sy - other.y) / dist;
+          let overlap = (this.size + other.size) - dist;
 
-      let totalWeight = this.weight + other.weight;
-      let myShare    = other.weight / totalWeight;
-      let theirShare = this.weight  / totalWeight;
+          other.othervx -= nx * overlap * 10;
+          other.othervy -= ny * overlap * 10;
 
-      let mult = 1;
-      //calculating multiplier for petal
-      if(this.shouldAttract){
-        mult = 0.0;
+          if (this.side !== other.side && this.hitTick <= 0) {
+            other.health -= this.damage * (this.health / this.maxHealth);
+            this.health  -= other.damage;
+            this.hitTick = 10;
+          }
+
+          if (other.health <= 0) {
+            score += entityTypes[other.type].score;
+            entities.splice(i, 1);
+          }
+        }
       }
-      // push petal via offset velocity
-      this.x  += nx * overlap * myShare * mult;
-      this.y  += ny * overlap * myShare * mult;
-      // push entity via its own velocity
-      other.othervx -= nx * overlap * theirShare * 10;
-      other.othervy -= ny * overlap * theirShare * 10;
+    }
+  } else {
+    for (let i = entities.length - 1; i >= 0; i--) {
+      let other = entities[i];
+      let dist = distance(this.x, this.y, other.x, other.y);
+      if (dist < this.size + other.size && dist > 0.01) {
+        let overlap = (this.size + other.size) - dist;
+        let nx = (this.x - other.x) / dist;
+        let ny = (this.y - other.y) / dist;
 
-      if (this.side !== other.side && this.hitTick <= 0) {
-        other.health -= this.damage*(this.health/this.maxHealth);
-        this.health  -= other.damage;
-        this.hitTick = 10;
-      }
+        let totalWeight = this.weight + other.weight;
+        let myShare    = other.weight / totalWeight;
+        let theirShare = this.weight  / totalWeight;
 
-      if (other.health <= 0) {
-        score += entityTypes[other.type].score;
-        entities.splice(i, 1);
+        let mult = 1;
+        //calculating multiplier for petal
+        if(this.shouldAttract){
+          mult = 0.0;
+        }
+        // push petal via offset velocity
+        this.x  += nx * overlap * myShare * mult;
+        this.y  += ny * overlap * myShare * mult;
+        // push entity via its own velocity
+        other.othervx -= nx * overlap * theirShare * 10;
+        other.othervy -= ny * overlap * theirShare * 10;
+
+        if (this.side !== other.side && this.hitTick <= 0) {
+          other.health -= this.damage*(this.health/this.maxHealth);
+          this.health  -= other.damage;
+          this.hitTick = 10;
+        }
+
+        if (other.health <= 0) {
+          score += entityTypes[other.type].score;
+          entities.splice(i, 1);
+        }
       }
     }
   }
@@ -587,7 +671,19 @@ Petal.prototype.draw = function () {
     ? this.currentRadius / this.orbitRadius
     : 1;
 
-  petalTypes[this.type].draw.call(this);
+  if (this.amount > 1) {
+    const anchorX = this.x;
+    const anchorY = this.y;
+    for (let j = 0; j < this.amount; j++) {
+      this.x = this.subX[j];
+      this.y = this.subY[j];
+      petalTypes[this.type].draw.call(this);
+    }
+    this.x = anchorX;
+    this.y = anchorY;
+  } else {
+    petalTypes[this.type].draw.call(this);
+  }
 };
 
 //starting entities
@@ -615,7 +711,7 @@ function basicLoad(){
 
 function fillAll(){
   for(let i = 0;i<PETAL_COUNT;i++){
-    petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "basic", "player",8));
+    petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "light", "player",4));
   }
 }
 fillAll();
@@ -786,8 +882,8 @@ function gameLoop() {
   if (Math.random() < 0.1&&entities.length<100){
     let x = 0;
     let y = 0;
-    let type = "tester";
-    entities.push(new Entity(type, x, y, 8));
+    let type = "soldierAnt";
+    entities.push(new Entity(type, x, y, 3));
   }
   //petal radius change
   if (keys[" "]) {
@@ -804,15 +900,56 @@ function gameLoop() {
     }
   }
 
+
+  //camera
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.scale(zoom, zoom);
   ctx.translate(-player.x, -player.y);
   update();
   ctx.restore();
-
-  drawDisplay();
   
+  //the display
+  drawDisplay();
+
+  //stuff for selecting petals
+  if(keys["h"]){
+    petals = [];
+    for(let i = 0;i<PETAL_COUNT;i++){
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "heavy", "player",2));
+    }
+  }
+  if(keys["b"]){
+    petals = [];
+    for(let i = 0;i<PETAL_COUNT;i++){
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "basic", "player",2));
+    }
+  }
+  if(keys["r"]){
+    petals = [];
+    for(let i = 0;i<PETAL_COUNT;i++){
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "rose", "player",2));
+    }
+  }
+  if(keys["s"]){
+    petals = [];
+    for(let i = 0;i<PETAL_COUNT;i++){
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "stinger", "player",2));
+    }
+  }
+  if(keys["l"]){
+    petals = [];
+    for(let i = 0;i<PETAL_COUNT;i++){
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "light", "player",2));
+    }
+  }
+  if(keys["k"]){
+    petals = [];
+    for(let i = 0;i<PETAL_COUNT;i++){
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "rock", "player",2));
+    }
+  }
+
   requestAnimationFrame(gameLoop);
 }
 gameLoop();
