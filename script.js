@@ -230,7 +230,7 @@ let petalTypes = {
     damage: 1,
     reloadTime: 100,
     size: 5,
-    weight: 0.01,
+    weight: 0,
     attraction: 10,
     class: "damage",
     amounts: [1, 2, 2, 3, 3, 5, 5, 5, 5],
@@ -603,8 +603,8 @@ Petal.prototype.update = function () {
           let ny = (sy - other.y) / dist;
           let overlap = (this.size + other.size) - dist;
 
-          other.othervx -= nx * overlap * 10;
-          other.othervy -= ny * overlap * 10;
+          other.othervx -= nx * overlap;
+          other.othervy -= ny * overlap;
 
           if (this.side !== other.side && this.hitTick <= 0) {
             other.health -= this.damage * (this.health / this.maxHealth);
@@ -711,7 +711,7 @@ function basicLoad(){
 
 function fillAll(){
   for(let i = 0;i<PETAL_COUNT;i++){
-    petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "light", "player",4));
+    petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "basic", "player",7));
   }
 }
 fillAll();
@@ -883,7 +883,7 @@ function gameLoop() {
     let x = 0;
     let y = 0;
     let type = "soldierAnt";
-    entities.push(new Entity(type, x, y, 3));
+    entities.push(new Entity(type, x, y, 5));
   }
   //petal radius change
   if (keys[" "]) {
@@ -916,37 +916,37 @@ function gameLoop() {
   if(keys["h"]){
     petals = [];
     for(let i = 0;i<PETAL_COUNT;i++){
-      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "heavy", "player",2));
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "heavy", "player",7));
     }
   }
   if(keys["b"]){
     petals = [];
     for(let i = 0;i<PETAL_COUNT;i++){
-      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "basic", "player",2));
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "basic", "player",7));
     }
   }
   if(keys["r"]){
     petals = [];
     for(let i = 0;i<PETAL_COUNT;i++){
-      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "rose", "player",2));
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "rose", "player",7));
     }
   }
   if(keys["s"]){
     petals = [];
     for(let i = 0;i<PETAL_COUNT;i++){
-      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "stinger", "player",2));
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "stinger", "player",7));
     }
   }
   if(keys["l"]){
     petals = [];
     for(let i = 0;i<PETAL_COUNT;i++){
-      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "light", "player",2));
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "light", "player",7));
     }
   }
   if(keys["k"]){
     petals = [];
     for(let i = 0;i<PETAL_COUNT;i++){
-      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "rock", "player",2));
+      petals.push(new Petal(ORBIT_RADIUS, ORBIT_SPEED, i, "rock", "player",7));
     }
   }
 
